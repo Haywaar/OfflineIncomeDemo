@@ -1,36 +1,32 @@
-﻿using System;
+﻿using _Project.Features.OfflineIncome.Scripts.Domain;
+using _Project.Features.OfflineIncome.Scripts.Infrastructure;
 using _Project.Features.PlayerWallet.Scripts.Domain;
 using _Project.Game.Scripts.Domain;
 using R3;
-using TMPro;
 using UnityEngine;
-using UnityEngine.Events;
-using UnityEngine.Serialization;
-using UnityEngine.UI;
 
 namespace _Project.Features.OfflineIncome.Scripts.Views
 {
     public class OfflineIncomeManager : MonoBehaviour
     {
-        [SerializeField] private long _offlineIncomeMinTime;
-        [SerializeField] private long _offlineIncomeMaxTime;
+        [SerializeField] private OfflineIncomeConfig _offlineIncomeConfig;
+        [SerializeField] private OfflineIncomePopup _offlineIncomePopupPrefab;
+        [SerializeField] private Transform _offlineIncomePopupContainer;
 
-        [SerializeField] private float _coinsPerSecond;
-
-        [SerializeField] private GameObject _offlineIncomePopup;
-        [SerializeField] private TextMeshProUGUI _offlineIncomeText;
-        [SerializeField] private Button _closePopupButton;
-
-
-        private const string OfflineIncomeSaveKey = "OfflineIncome_LastActiveTime";
-        private float _coinsToReward;
-
+        private OfflineIncomeRepository _repository;
+        private OfflineIncomeCalculator _calculator;
+        
+        private readonly CompositeDisposable _disposable = new();
+        
         private void Awake()
         {
-            _closePopupButton.onClick.AddListener(ClosePopup);
-            StartActiveTimer();
+            _calculator =
+                new OfflineIncomeCalculator(_offlineIncomeConfig);
+
+            _repository = new OfflineIncomeRepository();
+            _repository.StartActiveTimer(_disposable);
         }
-        
+
         private void OnApplicationFocus(bool hasFocus)
         {
             if (hasFocus)
@@ -41,62 +37,30 @@ namespace _Project.Features.OfflineIncome.Scripts.Views
 
         private void TryToShowOfflineIncomePopup()
         {
-            var offlineTime = GetOfflineTimeInSeconds();
-            var needToShowPopup = offlineTime > _offlineIncomeMinTime;
+            var offlineTime = _repository.GetOfflineTimeInSeconds();
+            var needToShowPopup = offlineTime > _offlineIncomeConfig.MinTime;
             if (needToShowPopup)
             {
-                var coinsToReward = CalculateCoinReward(offlineTime);
+                var coinsToReward = _calculator.CalculateCoinReward(offlineTime);
                 ShowOfflineIncomePopup(offlineTime, coinsToReward);
             }
         }
 
-        private long GetOfflineTimeInSeconds()
+        private void ShowOfflineIncomePopup(long offlineTime, float coinsToReward)
         {
-            var currentTime = DateTimeOffset.Now.ToUnixTimeSeconds();
-            var previousTime = currentTime;
-            var previousTimeStr = PlayerPrefs.GetString(OfflineIncomeSaveKey);
-            if (!long.TryParse(previousTimeStr, out previousTime))
-            {
-                Debug.LogError("Can't parse offline time, value: " + previousTimeStr);
-            }
-            
-            var delta = currentTime - previousTime;
-            return Math.Min(delta, _offlineIncomeMaxTime);
-        }
-        
-        private void StartActiveTimer()
-        {
-            Observable.Interval(TimeSpan.FromSeconds(1.0f))
-                .Subscribe(_ => SaveTime())
-                .AddTo(this);
+            var popup = Instantiate(_offlineIncomePopupPrefab, _offlineIncomePopupContainer);
+            popup.Initialize(offlineTime, coinsToReward,OnPopupClosed);
         }
 
-        private void SaveTime()
+        private void OnPopupClosed(float coinsToReward)
         {
-            var currentTime = DateTimeOffset.Now.ToUnixTimeSeconds();
-            PlayerPrefs.SetString(OfflineIncomeSaveKey, currentTime.ToString());
-            Debug.Log("Save " + currentTime );
+            var playerWallet = ServiceLocator.Current.Get<PlayerWalletService>();
+            playerWallet.AddCurrency(CurrencyType.Gold, coinsToReward);
         }
 
-        private void ShowOfflineIncomePopup(long offlineTime, float coinsReward)
+        private void OnDestroy()
         {
-            _coinsToReward = coinsReward;
-            _offlineIncomePopup.SetActive(true);
-            _offlineIncomeText.text = $"Тебя не было {offlineTime} секунд, вот твои {coinsReward} монеток!";
-        }
-        
-        private void ClosePopup()
-        {
-            var playerWalletService = ServiceLocator.Current.Get<PlayerWalletService>();
-            playerWalletService.AddCurrency(CurrencyType.Gold, _coinsToReward);
-            _coinsToReward = 0;
-         
-            _offlineIncomePopup.SetActive(false);
-        }
-
-        private float CalculateCoinReward(long offlineTime)
-        {
-            return offlineTime * _coinsPerSecond;
+            _disposable.Dispose();
         }
     }
 }
