@@ -42,21 +42,24 @@ namespace _Project.Features.OfflineIncome.Scripts.Views
         private void TryToShowOfflineIncomePopup()
         {
             var offlineTime = GetOfflineTimeInSeconds();
-            Debug.Log("offline time "   + offlineTime);
             var needToShowPopup = offlineTime > _offlineIncomeMinTime;
             if (needToShowPopup)
             {
-                var coinsToReward = offlineTime * _coinsPerSecond;
+                var coinsToReward = CalculateCoinReward(offlineTime);
                 ShowOfflineIncomePopup(offlineTime, coinsToReward);
             }
         }
 
         private long GetOfflineTimeInSeconds()
         {
-            var previousTimeStr = PlayerPrefs.GetString(OfflineIncomeSaveKey);
-            
-            if(long.TryParse(previousTimeStr, out var previousTime));
             var currentTime = DateTimeOffset.Now.ToUnixTimeSeconds();
+            var previousTime = currentTime;
+            var previousTimeStr = PlayerPrefs.GetString(OfflineIncomeSaveKey);
+            if (!long.TryParse(previousTimeStr, out previousTime))
+            {
+                Debug.LogError("Can't parse offline time, value: " + previousTimeStr);
+            }
+            
             var delta = currentTime - previousTime;
             return Math.Min(delta, _offlineIncomeMaxTime);
         }
@@ -89,6 +92,11 @@ namespace _Project.Features.OfflineIncome.Scripts.Views
             _coinsToReward = 0;
          
             _offlineIncomePopup.SetActive(false);
+        }
+
+        private float CalculateCoinReward(long offlineTime)
+        {
+            return offlineTime * _coinsPerSecond;
         }
     }
 }

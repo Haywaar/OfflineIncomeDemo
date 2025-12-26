@@ -14,7 +14,7 @@ namespace _Project.Features.PlayerWallet.Scripts.Domain
         private Dictionary<CurrencyType, float> _playerCurrencies;
 
         public readonly Subject<CurrencyType> OnCurrencyChanged = new();
-        
+
         public PlayerWalletService(PlayerWalletRepository repository)
         {
             _repository = repository;
@@ -34,29 +34,35 @@ namespace _Project.Features.PlayerWallet.Scripts.Domain
         public void AddCurrency(CurrencyType currencyType, float amount)
         {
             _playerCurrencies[currencyType] += amount;
+            
             _repository.SaveCurrency(currencyType, GetCurrencyAmount(currencyType));
             OnCurrencyChanged.OnNext(currencyType);
         }
 
         public void SubstractCurrency(CurrencyType currencyType, float amount)
         {
-            var currencyAmount = GetCurrencyAmount(currencyType);
-            if (currencyAmount < amount)
+            if (!HaveEnoughCurrency(currencyType, amount))
             {
-                Debug.LogError("Cannot substract currency");
+                Debug.LogError($"Not enough currency {currencyType}");
                 return;
             }
-            
+
+
             _playerCurrencies[currencyType] -= amount;
-           
-            _repository.SaveCurrency(currencyType,GetCurrencyAmount(currencyType));
-            
+
+            _repository.SaveCurrency(currencyType, GetCurrencyAmount(currencyType));
             OnCurrencyChanged.OnNext(currencyType);
         }
 
         public float GetCurrencyAmount(CurrencyType currencyType)
         {
             return _playerCurrencies[currencyType];
+        }
+
+        public bool HaveEnoughCurrency(CurrencyType currencyType, float amount)
+        {
+            var currencyAmount = GetCurrencyAmount(currencyType);
+            return currencyAmount >= amount;
         }
     }
 }
